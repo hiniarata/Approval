@@ -77,13 +77,60 @@ class ApprovalModelEventListener extends BcModelEventListener {
     if (empty($settingData)) {
       return true;
     //設定はあるが、利用しない:0の場合もスルーする
-    } elseif ($setting['ApprovalLevelSetting']['publish'] == 0){
+    } elseif ($settingData['ApprovalLevelSetting']['publish'] == 0){
       return true;
     //設定があり、かつ利用する:1場合のみ処理に入る。
     } else {
       /* 除外処理（承認処理を行うにも関わらずフラグが届いていない。）*/
       if (empty($BlogPost->data['Approval'])) {
         return false;
+      }
+
+      //承認・保留・拒否に関わらず、カテゴリが変更になった場合、新しいカテゴリの承認フローを１からへる必要がある。
+      //現在のデータ取得
+      $approvalData = $approvalPost->find('first', array('conditions' => array(
+        'ApprovalPost.post_id' => $BlogPost->data['BlogPost']['id']
+      )));
+      //新規作成の時などはデータがないので、ある場合のみ処理。
+      if (!empty($approvalData)) {
+        //カテゴリの変更を検知
+        if ($approvalData['ApprovalPost']['blog_category_id'] !== $BlogPost->data['BlogPost']['blog_category_id']) {
+          //変更後のカテゴリに承認設定があるかどうかを確認する。
+          $newCategorySetting = $this->ApprovalLevelSetting->find('first', array('conditions' => array(
+            'ApprovalLevelSetting.publish' => 1,
+            'ApprovalLevelSetting.type' => 'blog',
+            'ApprovalLevelSetting.category_id' => $BlogPost->data['BlogPost']['blog_category_id']
+          )));
+          //カテゴリ個別の設定がない場合は、ブログ全体を確かめる。
+          if (empty($newCategorySetting)) {
+            $newCategorySetting = $this->ApprovalLevelSetting->find('first', array('conditions' => array(
+              'ApprovalLevelSetting.publish' => 1,
+              'ApprovalLevelSetting.type' => 'blog',
+              'ApprovalLevelSetting.blog_content_id' => $BlogPost->data['BlogPost']['blog_content_id']
+            )));
+          }
+          //ブログ全体にも設定がない場合は、承認設定がないので現在の承認段階フローの記録を消して通過させる。
+          if (empty($newCategorySetting)) {
+            //削除実行
+            $this->ApprovalPost->delete($approvalData['ApprovalPost']['id']);
+            //通過させる。
+            return true;
+
+          //何かしらの承認設定があった場合
+          } else {
+            //新しい承認設定のもと、第１段階まで戻す。
+            $approvalData['ApprovalPost']['blog_category_id'] = $BlogPost->data['BlogPost']['blog_category_id'];
+            $approvalData['ApprovalPost']['next_approver_id'] = $newCategorySetting['ApprovalLevelSetting']['level1_approver_id'];
+            $approvalData['ApprovalPost']['pass_stage'] = 0;
+            $BlogPost->data['BlogPost']['status'] = 0;
+            //TODO メール送信
+            if ($this->ApprovalPost->save($approvalData)) {
+              return true;
+            } else {
+              return false;
+            }
+          }
+        }
       }
 
       /* 承認フラグを確認する。*/
@@ -262,6 +309,10 @@ class ApprovalModelEventListener extends BcModelEventListener {
           $post['ApprovalPost']['pass_stage'] = 0;
           //申請段階のため次のステージは必ず１
           $post['ApprovalPost']['next_approver_id'] = $settingData['ApprovalLevelSetting']['level1_approver_id'];
+          //承認申請を行う段階で選択されたカテゴリを取得する。
+          if (!empty($BlogPost->data['BlogPost']['blog_category_id'])) {
+              $post['ApprovalPost']['next_approver_id'] = $BlogPost->data['BlogPost']['blog_category_id'];
+          }
 
           /* 申請の記録を保存する */
           if ($approvalPost->save($post)) {
@@ -270,15 +321,21 @@ class ApprovalModelEventListener extends BcModelEventListener {
             return true;
           }
 
-        //新規作成の場合（承認情報データがない場合）
+        //承認情報データがない場合
         } else {
           //承認情報DBへデータを挿入する。
           $post['ApprovalPost'] = $BlogPost->data['BlogPost'];
-          //ブログの最終IDを取得する。getLastInsertID();が効かない・・・
-          App::import('Model', 'Blog.BlogPost');
-          $blogModel = new BlogPost();
-          $blogLastData = $blogModel->find('first', array('order' => array('BlogPost.id DESC')));
-          $post['ApprovalPost']['post_id'] = (int)$blogLastData['BlogPost']['id'] +1;
+          //idがある場合（一度保留を経て申請）。
+          if (!empty($BlogPost->data['BlogPost']['id'])) {
+            $post['ApprovalPost']['post_id'] = $BlogPost->data['BlogPost']['id'];
+          //idがない場合（新規作成）
+          } else {
+            //ブログの最終IDを取得する。getLastInsertID();が効かない・・・
+            App::import('Model', 'Blog.BlogPost');
+            $blogModel = new BlogPost();
+            $blogLastData = $blogModel->find('first', array('order' => array('BlogPost.id DESC')));
+            $post['ApprovalPost']['post_id'] = (int)$blogLastData['BlogPost']['id'] +1;
+          }
           $post['ApprovalPost']['id'] = '';
           unset($post['ApprovalPost']['id']);
           //申請段階のため通過ステージは0にする
