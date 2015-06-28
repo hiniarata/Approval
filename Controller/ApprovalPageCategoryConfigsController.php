@@ -268,26 +268,27 @@ class ApprovalPageCategoryConfigsController extends ApprovalAppController {
   *
   * @return void
   */
-  public function admin_delete($blogContentId = null){
+  public function admin_delete($categoryId = null){
     /* 除外処理 */
-    if (empty($blogContentId)) {
+    if (empty($categoryId)) {
       $this->setMessage('無効なIDです。', true);
       $this->redirect(array('action' => 'index'));
     }
-    // ブログ情報の取得
-    $blogContent = $this->BlogContent->findById($blogContentId);
-    // 設定データの取得
+    //承認情報取得
     $settingData = $this->ApprovalLevelSetting->find('first', array('conditions' => array(
-      'ApprovalLevelSetting.blog_content_id' => $blogContentId
+      'ApprovalLevelSetting.type' => 'page',
+      'ApprovalLevelSetting.category_id' => $categoryId,
     )));
+    //カテゴリ情報
+    $categoryData = $this->PageCategory->findById($categoryId);
     /* 除外処理 */
-    if (empty($settingData)) {
-      $this->setMessage('承認設定が未設定です。', true);
+    if (empty($categoryData) || empty($settingData)) {
+      $this->setMessage('無効なIDです。', true);
       $this->redirect(array('action' => 'index'));
     }
     // 削除実行
     if ($this->ApprovalLevelSetting->delete($settingData['ApprovalLevelSetting']['id'])) {
-      $this->setMessage('ブログ「'.$blogContent['BlogContent']['title'].'」の承認設定を初期化しました。', false, true);
+      $this->setMessage('カテゴリ「'.$categoryData['PageCategory']['title'].'」の承認設定を初期化しました。', false, true);
       $this->redirect(array('action' => 'index'));
     } else {
       $this->setMessage('入力エラーです。初期化に失敗しました。', true);

@@ -236,7 +236,7 @@ class ApprovalPageConfigsController extends ApprovalAppController {
     // 削除実行
     if ($this->ApprovalLevelSetting->delete($id)) {
       $this->setMessage('固定ページ（全体）の承認設定を初期化しました。', false, true);
-      $this->redirect(array('action' => 'index'));
+      $this->redirect(array('action' => 'form'));
     } else {
       $this->setMessage('入力エラーです。初期化に失敗しました。', true);
     }

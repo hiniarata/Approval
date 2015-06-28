@@ -31,8 +31,9 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
 
 
   /**
-  * メッセージ出力
-  * 承認設定がある場合に必要なメッセージを出力する。
+  * 承認確認メッセージ出力
+  * 承認設定がある場合に必要なメッセージを
+  * 細かく条件わけして出力する。
   *
   * @return  void
   * @access  public
@@ -287,9 +288,7 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
                       }
                     }
                   break;
-
                 default:
-                  # code...
                   break;
               }
 
@@ -360,8 +359,5 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
     }
     return true;
   }
-
-
-
 
 }

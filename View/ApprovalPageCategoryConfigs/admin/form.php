@@ -253,9 +253,11 @@ for($i=1; $i<6; $i++){
   <!-- button -->
   <div class="submit">
     <?php echo $this->BcForm->submit('保存', array('div' => false, 'class' => 'button', 'id' => 'BtnSave')) ?>
-      <?php
+    <?php
+    if(!empty($approvalId)){
       $this->BcBaser->link('初期化', array('action' => 'delete',$pageData['PageCategory']['id']), array('class' => 'button'), sprintf('本当に初期化してもいいですか？'), false);
-      ?>
+    }
+    ?>
   </div>
 
   <?php echo $this->BcForm->end() ?>

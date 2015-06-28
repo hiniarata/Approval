@@ -255,11 +255,11 @@ for($i=1; $i<6; $i++){
     <?php echo $this->BcForm->hidden('ApprovalLevelSetting.category_id', array('value' => 0)); ?>
     <?php echo $this->BcForm->hidden('ApprovalLevelSetting.type', array('value' => 'blog')); ?>
     <?php echo $this->BcForm->submit('保存', array('div' => false, 'class' => 'button', 'id' => 'BtnSave')) ?>
-    <?php if ($this->action == 'admin_edit'): ?>
-      <?php
-      $this->BcBaser->link('削除', array('action' => 'delete', $this->BcForm->value('Voice.id')), array('class' => 'button'), sprintf('本当に削除してもいいですか？'), false);
-      ?>
-    <?php endif ?>
+    <?php
+    if(!empty($approvalId)){
+      $this->BcBaser->link('初期化', array('action' => 'delete',$blogData['BlogContent']['id']), array('class' => 'button'), sprintf('本当に初期化してもいいですか？'), false);
+    }
+    ?>
   </div>
 
   <?php echo $this->BcForm->end() ?>

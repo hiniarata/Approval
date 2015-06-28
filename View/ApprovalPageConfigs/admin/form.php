@@ -255,7 +255,9 @@ for($i=1; $i<6; $i++){
   <div class="submit">
     <?php echo $this->BcForm->submit('保存', array('div' => false, 'class' => 'button', 'id' => 'BtnSave')) ?>
     <?php
-    $this->BcBaser->link('初期化', array('action' => 'delete', $approvalId), array('class' => 'button'), sprintf('本当に初期化してもいいですか？'), false);
+    if(!empty($approvalId)){
+      $this->BcBaser->link('初期化', array('action' => 'delete',$approvalId), array('class' => 'button'), sprintf('本当に初期化してもいいですか？'), false);
+    }
     ?>
   </div>
 
