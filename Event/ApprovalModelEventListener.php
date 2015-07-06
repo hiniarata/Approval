@@ -33,6 +33,17 @@ class ApprovalModelEventListener extends BcModelEventListener {
   * ブログ投稿 beforeSave
   * 承認や差戻しの状態を確認し、データ操作を行う。
   *
+  * [仕様]
+  * 記事が属するカテゴリもしくはコンテンツ全体に承認設定があると処理に入る。
+  * 記事の作成段階では「申請」を行う。申請があってはじめて承認段階に入る。
+  * 「承認」は設定で決められた承認権限者が行う。ユーザーの場合とグループの場合がある。
+  * 「承認」されるとpass_stageが1上がる。「差し戻し」を受けると1下がる。
+  * 申請前も第１段階承認前もpass_stageは「0」。
+  * 区別をつける必要がある時は「next_approver_id」を見る。申請前はまだ「0」になっている。
+  *
+  * カテゴリ毎に設定ができるため、途中でカテゴリが変更されたら、
+  * 変更後のカテゴリの承認設定に従うため、一度リセット（申請前まで戻す）する必要がある。
+  *
   * @return  void
   * @access  public
   */
@@ -76,9 +87,11 @@ class ApprovalModelEventListener extends BcModelEventListener {
     //設定がされてない場合はスルーする
     if (empty($settingData)) {
       return true;
+
     //設定はあるが、利用しない:0の場合もスルーする
     } elseif ($settingData['ApprovalLevelSetting']['publish'] == 0){
       return true;
+
     //設定があり、かつ利用する:1場合のみ処理に入る。
     } else {
       /* 除外処理（承認処理を行うにも関わらずフラグが届いていない。）*/
@@ -86,8 +99,11 @@ class ApprovalModelEventListener extends BcModelEventListener {
         return false;
       }
 
-      //承認・保留・拒否に関わらず、カテゴリが変更になった場合、新しいカテゴリの承認フローを１からへる必要がある。
-      //現在のデータ取得
+      //承認・保留・拒否に関わらず、カテゴリが変更になった場合、
+      //新しいカテゴリの承認フローを１から通過する必要がある。
+      //---------------------------------
+      // カテゴリ変更の検知
+      //---------------------------------
       $approvalData = $approvalPost->find('first', array('conditions' => array(
         'ApprovalPost.post_id' => $BlogPost->data['BlogPost']['id']
       )));
@@ -118,12 +134,12 @@ class ApprovalModelEventListener extends BcModelEventListener {
 
           //何かしらの承認設定があった場合
           } else {
-            //新しい承認設定のもと、第１段階まで戻す。
+            //新しい承認設定のもと、申請段階前まで戻す。
             $approvalData['ApprovalPost']['blog_category_id'] = $BlogPost->data['BlogPost']['blog_category_id'];
-            $approvalData['ApprovalPost']['next_approver_id'] = $newCategorySetting['ApprovalLevelSetting']['level1_approver_id'];
+            $approvalData['ApprovalPost']['next_approver_id'] = 0;
             $approvalData['ApprovalPost']['pass_stage'] = 0;
             $BlogPost->data['BlogPost']['status'] = 0;
-            //TODO メール送信
+            //データの更新
             if ($this->ApprovalPost->save($approvalData)) {
               return true;
             } else {
@@ -220,6 +236,7 @@ class ApprovalModelEventListener extends BcModelEventListener {
                   //最終承認まで行っていない場合は、強制非公開にする。
                   if ($post['ApprovalPost']['pass_stage'] < $last_stage) {
                     $BlogPost->data['BlogPost']['status'] = 0;
+                    $this->_sendApprovalMail($settingData, $approvalData, $BlogPost->data, 1);
                   }
                   return true;
                 }
@@ -257,6 +274,7 @@ class ApprovalModelEventListener extends BcModelEventListener {
                   //pass_stageがlast_stageより大きくなければ（最終承認まで行っていない）、非公開は続行。
                   if ($post['ApprovalPost']['pass_stage'] < $last_stage) {
                     $BlogPost->data['BlogPost']['status'] = 0;
+                    $this->_sendApprovalMail($settingData, $approvalData, $BlogPost->data, 1);
                   }
                   return true;
                 }
@@ -301,12 +319,13 @@ class ApprovalModelEventListener extends BcModelEventListener {
         } else {
           $approvalData['ApprovalPost']['next_approver_id'] = 0;
         }
-
+//var_dump($approvalData);exit;
         /* 却下の記録を保存する */
         //承認情報DBを更新する
         if ($approvalPost->save($approvalData)) {
           //常に非公開状態（承認が下るまでは非公開にする）
           $BlogPost->data['BlogPost']['status'] = 0;
+          $this->_sendApprovalMail($settingData, $approvalData, $BlogPost->data, 2);
           return true;
         }
 
@@ -316,9 +335,11 @@ class ApprovalModelEventListener extends BcModelEventListener {
       } elseif ($BlogPost->data['Approval']['approval_flag'] == 3){
         //現在の承認情報データの取得
         //（一度却下されたあとの場合はデータが存在する。）
-        $approvalData = $approvalPost->find('first', array('conditions' => array(
-          'ApprovalPost.post_id' => $BlogPost->data['BlogPost']['id']
-        )));
+        if (!empty($BlogPost->data['BlogPost']['id'])) {
+          $approvalData = $approvalPost->find('first', array('conditions' => array(
+            'ApprovalPost.post_id' => $BlogPost->data['BlogPost']['id']
+          )));
+        }
 
         //すでに承認情報データがある（却下されて最初の段階まで戻った場合）
         if (!empty($approvalData)) {
@@ -339,6 +360,7 @@ class ApprovalModelEventListener extends BcModelEventListener {
           if ($approvalPost->save($post)) {
             //常に非公開状態（承認が下るまでは非公開にする）
             $BlogPost->data['BlogPost']['status'] = 0;
+            $this->_sendApprovalMail($settingData, $approvalData, $BlogPost->data, 3);
             return true;
           }
 
@@ -368,6 +390,7 @@ class ApprovalModelEventListener extends BcModelEventListener {
           if ($approvalPost->save($post)) {
             //常に非公開状態（承認が下るまでは非公開にする）
             $BlogPost->data['BlogPost']['status'] = 0;
+            $this->_sendApprovalMail($settingData, null, $BlogPost->data, 3);
             return true;
           }
         }
@@ -470,12 +493,11 @@ class ApprovalModelEventListener extends BcModelEventListener {
 
           //何かしらの承認設定があった場合
           } else {
-            //新しい承認設定のもと、第１段階まで戻す。
+            //新しい承認設定のもと、申請前段階まで戻す。
             $approvalData['ApprovalPage']['page_category_id'] = $PagePost->data['Page']['page_category_id'];
-            $approvalData['ApprovalPage']['next_approver_id'] = $newCategorySetting['ApprovalLevelSetting']['level1_approver_id'];
+            $approvalData['ApprovalPage']['next_approver_id'] = 0;
             $approvalData['ApprovalPage']['pass_stage'] = 0;
             $PagePost->data['Page']['status'] = 0;
-            //TODO メール送信
             if ($this->ApprovalPage->save($approvalData)) {
               return true;
             } else {
@@ -573,6 +595,8 @@ class ApprovalModelEventListener extends BcModelEventListener {
                   //最終承認まで行っていない場合は、強制非公開にする。
                   if ($post['ApprovalPage']['pass_stage'] < $last_stage) {
                     $PagePost->data['Page']['status'] = 0;
+                    //メールの送信（最終までいけば送信は不要）
+                    $this->_sendApprovalMail($settingData, $approvalData, $PagePost->data, 1);
                   }
                   return true;
                 }
@@ -610,6 +634,8 @@ class ApprovalModelEventListener extends BcModelEventListener {
                   //pass_stageがlast_stageより大きくなければ（最終承認まで行っていない）、非公開は続行。
                   if ($post['ApprovalPage']['pass_stage'] < $last_stage) {
                     $PagePost->data['Page']['status'] = 0;
+                    //メールの送信（最終までいけば送信は不要）
+                    $this->_sendApprovalMail($settingData, $approvalData, $PagePost->data, 1);
                   }
                   return true;
                 }
@@ -659,6 +685,8 @@ class ApprovalModelEventListener extends BcModelEventListener {
         if ($approvalPage->save($approvalData)) {
           //常に非公開状態（承認が下るまでは非公開にする）
           $PagePost->data['Page']['status'] = 0;
+          //メールの送信
+          $this->_sendApprovalMail($settingData, $approvalData, $PagePost->data, 2);
           return true;
         }
 
@@ -668,10 +696,11 @@ class ApprovalModelEventListener extends BcModelEventListener {
       } elseif ($PagePost->data['Approval']['approval_flag'] == 3){
         //現在の承認情報データの取得
         //（一度却下されたあとの場合はデータが存在する。）
-        $approvalData = $approvalPage->find('first', array('conditions' => array(
-          'ApprovalPage.page_id' => $PagePost->data['Page']['id']
-        )));
-
+        if (!empty($PagePost->data['Page']['id'])) {
+          $approvalData = $approvalPage->find('first', array('conditions' => array(
+            'ApprovalPage.page_id' => $PagePost->data['Page']['id']
+          )));
+        }
         //すでに承認情報データがある（却下されて最初の段階まで戻った場合）
         if (!empty($approvalData)) {
           //承認情報DBへデータを挿入する。
@@ -691,6 +720,8 @@ class ApprovalModelEventListener extends BcModelEventListener {
           if ($approvalPage->save($post)) {
             //常に非公開状態（承認が下るまでは非公開にする）
             $PagePost->data['Page']['status'] = 0;
+            //メールの送信
+            $this->_sendApprovalMail($settingData, $approvalData, $PagePost->data, 3);
             return true;
           }
 
@@ -720,6 +751,8 @@ class ApprovalModelEventListener extends BcModelEventListener {
           if ($approvalPage->save($post)) {
             //常に非公開状態（承認が下るまでは非公開にする）
             $PagePost->data['Page']['status'] = 0;
+            //メールの送信
+            $this->_sendApprovalMail($settingData, null, $PagePost->data, 3);
             return true;
           }
         }
@@ -733,5 +766,252 @@ class ApprovalModelEventListener extends BcModelEventListener {
     }
   }
 
+
+  /**
+  * 申請・承認・差戻し連絡メール送信
+  *
+  * @param   array $setting
+  * @param   array   $approvalData
+  * @param   array   $postData
+  * @param   array   $approvalType
+  * @return  boolean
+  * @access  public
+  */
+  private function _sendApprovalMail($setting, $approvalData = null, $postData, $approvalType){
+    /* インポート */
+    //コンポーネント
+    /* TODO メール送信にBcEmailComponentを使用する
+    App::import('Component', 'BcEmail');
+    */
+    //モデル
+    App::import('Model', 'User');
+    $userModel = new User();
+    //サイト設定
+    App::import('Model', 'SiteConfig');
+    $siteConfigModel = new SiteConfig();
+    $siteConfigs = $siteConfigModel->find('first', array('conditions' => array(
+      'SiteConfig.name' => 'email'
+    )));
+    /* 情報の整理 */
+    //タイプ
+    $type = $setting['ApprovalLevelSetting']['type'];
+
+    //------------------------------
+    // 固定ページ
+    //------------------------------
+    if ($type == 'page') {
+      //承認タイプによって内容を変更する
+      switch ($approvalType) {
+        case 1:
+          $approvalTypeVal = '承認申請';
+          $firstMes = '表題の固定ページについて、前段階の承認権限者より承認が下りました。' . "\n";
+          $firstMes .= '内容をお確かめのうえ、承認処理をお願いします。' . "\n". "\n";
+          break;
+        case 2:
+          $approvalTypeVal = '差戻通知';
+          $firstMes = '表題の固定ページについて、次段階の承認権限者より差戻しがありました。' . "\n";
+          $firstMes .= '内容をお確かめのうえ、承認処理をお願いします。' . "\n". "\n";
+          break;
+        case 3:
+          $approvalTypeVal = '承認申請';
+          $firstMes = '表題の固定ページについて、作成者より承認申請がありました。' . "\n";
+          $firstMes .= '内容をお確かめのうえ、承認処理をお願いします。' . "\n". "\n";
+          break;
+        default:
+          break;
+      }
+
+      //メールを送るべき相手の段階
+      if (!empty($approvalData)) {
+        //ただし差戻し後の申請段階だとpass_stageが0になっている。
+        //申請時のメールは常に第１段階に権限者へ渡る。
+        if ($approvalType == 3) {
+          $passStage = 1;
+        } else {
+          $passStage = $approvalData['ApprovalPage']['pass_stage'];
+        }
+
+      //新規作成時は１段目の権限者に送る。
+      } else {
+        $passStage = 1;
+      }
+
+      //タイトルの確認
+      $title = $postData['Page']['title'];
+      //送信先のタイプ
+      if ($passStage != 0) { //最初の段階でなければgroupかuserかを取得
+        $approverType = $setting['ApprovalLevelSetting']['level'.$passStage.'_type'];
+      } else {
+        $approverType = 'user'; //最初の段階まで戻っていれば作成者（user）にメールする。
+      }
+
+      //最初の申請前の段階まで戻った時は作成者に送る
+      //そうでなければ権限者に送る。
+      if ($approvalData['ApprovalPage']['next_approver_id'] != 0) {
+        //送信先のユーザーを特定する。
+        if ($approverType == 'user') {
+          //ユーザーID
+          $userID = $setting['ApprovalLevelSetting']['level'.$passStage.'_approver_id'];
+          //ユーザー情報の取得
+          $userData = $userModel->findById($userID);
+        } else {
+          //グループID
+          $groupID = $setting['ApprovalLevelSetting']['level'.$passStage.'_approver_id'];
+          $userDatas = $userModel->find('all', array(
+            'conditions' => array(
+              'User.user_group_id' => $groupID
+          )));
+        }
+
+      //申請の前まで戻ってしまった場合。
+      } else {
+        $userID = $postData['Page']['author_id'];
+        $userData = $userModel->findById($userID);
+      }
+
+      //メッセージの取得
+      $mailData['message'] = '';
+      if (!empty($postData['Approval']['approval_comment'])) {
+        $mailData['message'] = $postData['Approval']['approval_comment'];
+      }
+
+      /* メール送信設定 */
+      // TODO BcEmailComponentを使って送信する。
+      mb_language("japanese");
+      mb_internal_encoding("UTF-8");
+      $subject = "【".$approvalTypeVal."】" . $title;
+      $from = $siteConfigs['SiteConfig']['value'];
+      //メールの内容作成
+      $body = $firstMes ."■申し送り事項". "\n" . $mailData['message'] . "\n" . "\n" . "以上";
+
+      //送信処理
+      if ($approverType == 'user') {
+        if (!empty($userData['User']['email'])) {
+          //メールの送信処理実行
+          $to = $userData['User']['email'];
+          mb_send_mail($to,$subject,$body,"From:".$from);
+        }
+      //グループだったら全員にループしつつメールする。
+      } elseif ($approverType == 'group')  {
+        if (!empty($userDatas)) {
+          foreach ($userDatas as $data) {
+            if (!empty($data['User']['email'])) {
+              //メールの送信処理実行
+              $to = $userData['User']['email'];
+              mb_send_mail($to,$subject,$body,"From:".$from);
+            }
+          }
+        }
+      }
+
+    //------------------------------
+    // ブログ
+    //------------------------------
+    } else {
+      //承認タイプによって内容を変更する
+      switch ($approvalType) {
+        case 1:
+          $approvalTypeVal = '承認申請';
+          $firstMes = '表題のブログ記事について、前段階の承認権限者より承認が下りました。' . "\n";
+          $firstMes .= '内容をお確かめのうえ、承認処理をお願いします。' . "\n". "\n";
+          break;
+        case 2:
+          $approvalTypeVal = '差戻通知';
+          $firstMes = '表題のブログ記事について、次段階の承認権限者より差戻しがありました。' . "\n";
+          $firstMes .= '内容をお確かめのうえ、承認処理をお願いします。' . "\n". "\n";
+          break;
+        case 3:
+          $approvalTypeVal = '承認申請';
+          $firstMes = '表題のブログ記事について、作成者より承認申請がありました。' . "\n";
+          $firstMes .= '内容をお確かめのうえ、承認処理をお願いします。' . "\n". "\n";
+          break;
+        default:
+          break;
+      }
+
+      //メールを送るべき相手の段階（0の時は作成者に送ることになる）
+      if (!empty($approvalData)) {
+        //ただし差戻し後の申請段階だとpass_stageが0になっている。
+        //申請時のメールは常に第１段階に権限者へ渡る。
+        if ($approvalType == 3) {
+          $passStage = 1;
+        } else {
+          $passStage = $approvalData['ApprovalPost']['pass_stage'];
+        }
+      //新規作成時は１段目の権限者に送る。
+      } else {
+        $passStage = 1;
+      }
+
+      //タイトルの確認
+      $title = $postData['BlogPost']['name'];
+      //送信先のタイプ
+      if ($passStage != 0) { //最初の段階でなければgroupかuserかを取得
+        $approverType = $setting['ApprovalLevelSetting']['level'.$passStage.'_type'];
+      } else {
+        $approverType = 'user'; //最初の段階まで戻っていれば作成者（user）にメールする。
+      }
+//echo $passStage;exit();
+      //申請の前段階まで戻った場合は作成者にメールする。
+      //そうでなければ、権限者へメールする。
+      if ($approvalData['ApprovalPost']['next_approver_id'] != 0) {
+        //送信先のユーザーを特定する。
+        if ($approverType == 'user') {
+          //ユーザーID
+          $userID = $setting['ApprovalLevelSetting']['level'.$passStage.'_approver_id'];
+          //ユーザー情報の取得
+          $userData = $userModel->findById($userID);
+        } else {
+          //グループID
+          $groupID = $setting['ApprovalLevelSetting']['level'.$passStage.'_approver_id'];
+          $userDatas = $userModel->find('all', array(
+            'conditions' => array(
+              'User.user_group_id' => $groupID
+          )));
+        }
+
+      //申請の前段階まで戻ってしまった
+      } else {
+        $userID = $postData['BlogPost']['user_id'];
+        $userData = $userModel->findById($userID);
+      }
+
+      //メッセージの取得
+      $mailData['message'] = '';
+      if (!empty($postData['Approval']['approval_comment'])) {
+        $mailData['message'] = $postData['Approval']['approval_comment'];
+      }
+
+      /* メール送信設定 */
+      // TODO BcEmailComponentを使って送信する。
+      mb_language("japanese");
+      mb_internal_encoding("UTF-8");
+      $subject = "【".$approvalTypeVal."】" . $title;
+      $from = $siteConfigs['SiteConfig']['value'];
+      //メールの内容作成
+      $body = $firstMes ."■申し送り事項". "\n" . $mailData['message'] . "\n" . "\n" . "以上";
+
+      //送信処理
+      if ($approverType == 'user') {
+        if (!empty($userData['User']['email'])) {
+          //メールの送信処理実行
+          $to = $userData['User']['email'];
+          mb_send_mail($to,$subject,$body,"From:".$from);
+        }
+      //グループだったら全員にループしつつメールする。
+      } elseif ($approverType == 'group')  {
+        if (!empty($userDatas)) {
+          foreach ($userDatas as $data) {
+            if (!empty($data['User']['email'])) {
+              //メールの送信処理実行
+              $to = $userData['User']['email'];
+              mb_send_mail($to,$subject,$body,"From:".$from);
+            }
+          }
+        }
+      }
+    }
+
+  }
 
 }

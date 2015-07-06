@@ -147,6 +147,8 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
               }
             }
 
+            //差し戻された場合はデータがあるが申請段階の可能性があるのでチェックする
+            if($approvalPostData['ApprovalPost']['next_approver_id'] != 0){
             //承認権限者のタイプを確認する。
             switch($nowApprovalType){
               case 'user':
@@ -179,6 +181,7 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
                 }
                 break;
             }
+          }
 
           //承認情報DBにない場合は、途中で承認設定がついた場合。メッセージを出力する。
           } else {
@@ -316,7 +319,10 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
 
           //もしも差し戻しを受けるなど、データはあるが申請段階のものであれば、
           //IDが承認権限者と一致しても承認段階にないので、メッセージを出力しない。
+          /*
           if ($approvalPageData['ApprovalPage']['pass_stage'] != 0 && $approvalPageData['ApprovalPage']['next_approver_id'] != 0) {
+          */
+          if ($approvalPageData['ApprovalPage']['next_approver_id'] != 0) {
             //承認権限者のタイプを確認してメッセージを出す。
             switch($nowApprovalType){
               case 'user':
@@ -409,29 +415,7 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
   public function formAfterForm(CakeEvent $event) {
     //ブログ＆固定ページ共通で、申し送り事項の表示処理を差し込む。
     //差し戻し、承認の時のみ、申し送り入力欄を表示する。
-    $approval_comment_toggle = '
-    <div id="ApprovalCommentNoUse">
-    使用しません。
-    </div>
-    <script type="text/javascript">
-    $(function(){
-      //初期表示
-      $("#ApprovalApprovalComment").css("display","none");
-      //値の変化を取得して表示を切り返える。
-      $("#ApprovalApprovalFlag").change(function(){
-        var flag = $("#ApprovalApprovalFlag").val();
-        // 保留以外で表示する
-        if (flag > 0) {
-          $("#ApprovalApprovalComment").css("display","inline");
-          $("#ApprovalCommentNoUse").css("display","none");
-        } else {
-          $("#ApprovalApprovalComment").css("display","none");
-          $("#ApprovalCommentNoUse").css("display","block");
-        }
-      });
-    });
-    </script>
-    ';
+    $approval_comment_toggle = $this->_getHiddenCommentFormCode();
 
     //処理を実行するのは、ブログと固定ページ
     //---------------------------------
@@ -535,7 +519,7 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
                             'options' => $options
                         ))
                     );
-                    //申送入力欄
+                    //申送入力欄（最終承認の時は無視する）
                     $event->data['fields'][] = array(
                         'title'    => '申し送り事項',
                         'input'    =>
@@ -973,4 +957,36 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
     return true;
   }
 
+
+  /**
+  * 申し送り事項フォームの表示を切り替えるコードを取得する。
+  * $event->data['fields']で出力するinputに追記する形で挿入する。
+  *
+  * @return  string
+  * @access  private
+  */
+  private function _getHiddenCommentFormCode(){
+    return '<div id="ApprovalCommentNoUse">
+    使用しません。
+    </div>
+    <script type="text/javascript">
+    $(function(){
+      //初期表示
+      $("#ApprovalApprovalComment").css("display","none");
+      //値の変化を取得して表示を切り返える。
+      $("#ApprovalApprovalFlag").change(function(){
+        var flag = $("#ApprovalApprovalFlag").val();
+        // 保留以外で表示する
+        if (flag > 0) {
+          $("#ApprovalApprovalComment").css("display","inline");
+          $("#ApprovalCommentNoUse").css("display","none");
+        } else {
+          $("#ApprovalApprovalComment").css("display","none");
+          $("#ApprovalCommentNoUse").css("display","block");
+        }
+      });
+    });
+    </script>
+    ';
+  }
 }
