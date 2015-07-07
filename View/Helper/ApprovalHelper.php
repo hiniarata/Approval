@@ -40,10 +40,10 @@ class ApprovalHelper extends AppHelper {
   * @access public
   */
   public function getBlogContentTitle($blogContentId){
-    $blogCategoryModel = new BlogCategory;
-    $category = $blogCategoryModel->findById($blogContentId);
-    if (!empty($category)) {
-      return $category['BlogCategory']['title'];
+    $blogContentModel = new BlogContent;
+    $content = $blogContentModel->findById($blogContentId);
+    if (!empty($content)) {
+      return $content['BlogContent']['title'];
     } else {
       return '';
     }

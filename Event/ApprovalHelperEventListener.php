@@ -502,7 +502,7 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
             //現在の承認権限者タイプ
             $nowApprovalType = $settingData['ApprovalLevelSetting']['level'.$nowStage.'_type'];
 
-            //編集モードの場合でも、next_approver_idが0の時は、却下で戻ってきたもの。
+            //申請時、または第１段階
             if ($pass_stage == 0) {
               //権限者の確認
               switch ($nowApprovalType) {
@@ -610,7 +610,7 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
                   break;
               }
 
-            //却下または第１段階ではなく、承認待ちの状態の場合
+            //通常の承認（却下または第１段階ではなく、承認待ちの状態の場合）
             } else {
               $now_stage = $pass_stage+1;
               //権限者の確認
