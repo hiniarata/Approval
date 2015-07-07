@@ -382,6 +382,7 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
         'ApprovalLevelSetting.type' => 'page',
         'ApprovalLevelSetting.publish' => 1
       )));
+      //カテゴリ設定がある場合
       if (!empty($categorySettingData)) {
         if (!empty($contentSettingData)) {
           $message = '<div id="MessageBox"><div id="flashMessage" class="notice-message">現在、ページを公開するのに権限者の承認が必要です<br><span style="font-size:13px;color:#666;font-weight:normal;">（まだ承認申請されていません。誰でも編集できますが「公開」は出来ません。）</span></div></div>';
@@ -390,6 +391,7 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
           $message = '<div id="MessageBox"><div id="flashMessage" class="notice-message">現在、特定のカテゴリのページを公開するのに権限者の承認が必要です。<br><span style="font-size:13px;color:#666;font-weight:normal;">（まだ承認申請されていません。誰でも編集できますが「公開」は出来ません。）</span></div></div>';
           $event->data['out'] = str_replace ('<form', $message.'<form', $event->data['out']);
         }
+      //カテゴリ設定がない
       } else {
         if (!empty($contentSettingData)) {
           $message = '<div id="MessageBox"><div id="flashMessage" class="notice-message">現在、ページを公開するのに権限者の承認が必要です<br><span style="font-size:13px;color:#666;font-weight:normal;">（まだ承認申請されていません。誰でも編集できますが「公開」は出来ません。）</span></div></div>';
@@ -973,6 +975,16 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
     $(function(){
       //初期表示
       $("#ApprovalApprovalComment").css("display","none");
+      //バリデーションエラー時に表示したい時がある。
+      $defaultVal = $("#ApprovalApprovalFlag").val();
+      // 保留以外で表示する
+      if (flag > 0) {
+        $("#ApprovalApprovalComment").css("display","inline");
+        $("#ApprovalCommentNoUse").css("display","none");
+      } else {
+        $("#ApprovalApprovalComment").css("display","none");
+        $("#ApprovalCommentNoUse").css("display","block");
+      }
       //値の変化を取得して表示を切り返える。
       $("#ApprovalApprovalFlag").change(function(){
         var flag = $("#ApprovalApprovalFlag").val();
