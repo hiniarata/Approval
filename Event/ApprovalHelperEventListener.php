@@ -510,6 +510,11 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
                   if ($approvalPostData['ApprovalPost']['next_approver_id'] == $user['id']) {
                     //承認権限があるかどうかを判定する。
                     $now_stage = $pass_stage+1;
+                    //もしもこれが最終承認であった場合、承認時の申し送りフォームは無意味
+                    //ただし却下では必要なので、フォーム自体を消せないため、専用の記述で上書きする。
+                    if ($now_stage == $settingData['ApprovalLevelSetting']['last_stage']) {
+                      $approval_comment_toggle = $this->_getLastHiddenCommentFormCode();
+                    }
                     //ユーザー情報を確認する。
                     $options = array(0 => '保留', 1 => '承認する', 2 => '差し戻す');
                     $event->data['fields'][] = array(
@@ -618,6 +623,11 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
                       $options = array(0 => '承認状態を維持', 2 => '差し戻す');
                     } else {
                       $options = array(0 => '保留', 1 => '承認する', 2 => '差し戻す');
+                      //もしもこれが最終承認であった場合、承認時の申し送りフォームは無意味
+                      //ただし却下では必要なので、フォーム自体を消せないため、専用の記述で上書きする。
+                      if ($now_stage == $settingData['ApprovalLevelSetting']['last_stage']) {
+                        $approval_comment_toggle = $this->_getLastHiddenCommentFormCode();
+                      }
                     }
                     $event->data['fields'][] = array(
                         'title'    => '承認設定',
@@ -645,6 +655,11 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
                       $options = array(0 => '承認状態を維持', 2 => '差し戻す');
                     } else {
                       $options = array(0 => '保留', 1 => '承認する', 2 => '差し戻す');
+                      //もしもこれが最終承認であった場合、承認時の申し送りフォームは無意味
+                      //ただし却下では必要なので、フォーム自体を消せないため、専用の記述で上書きする。
+                      if ($now_stage == $settingData['ApprovalLevelSetting']['last_stage']) {
+                        $approval_comment_toggle = $this->_getLastHiddenCommentFormCode();
+                      }
                     }
                     $event->data['fields'][] = array(
                         'title'    => '承認設定',
@@ -688,6 +703,7 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
           }
         }
       }
+
 
     //---------------------------------
     // 固定ページ投稿フォーム
@@ -777,6 +793,11 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
                   if ($approvalPageData['ApprovalPage']['next_approver_id'] == $user['id']) {
                     //承認権限があるかどうかを判定する。
                     $now_stage = $pass_stage+1;
+                    //もしもこれが最終承認であった場合、承認時の申し送りフォームは無意味
+                    //ただし却下では必要なので、フォーム自体を消せないため、専用の記述で上書きする。
+                    if ($now_stage == $settingData['ApprovalLevelSetting']['last_stage']) {
+                      $approval_comment_toggle = $this->_getLastHiddenCommentFormCode();
+                    }
                     //ユーザー情報を確認する。
                     $options = array(0 => '保留', 1 => '承認する', 2 => '差し戻す');
                     $event->data['fields'][] = array(
@@ -884,6 +905,11 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
                       $options = array(0 => '承認状態を維持', 2 => '差し戻す');
                     } else {
                       $options = array(0 => '保留', 1 => '承認する', 2 => '差し戻す');
+                      //もしもこれが最終承認であった場合、承認時の申し送りフォームは無意味
+                      //ただし却下では必要なので、フォーム自体を消せないため、専用の記述で上書きする。
+                      if ($now_stage == $settingData['ApprovalLevelSetting']['last_stage']) {
+                        $approval_comment_toggle = $this->_getLastHiddenCommentFormCode();
+                      }
                     }
                     $event->data['fields'][] = array(
                         'title'    => '承認設定',
@@ -911,6 +937,11 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
                       $options = array(0 => '承認状態を維持', 2 => '差し戻す');
                     } else {
                       $options = array(0 => '保留', 1 => '承認する', 2 => '差し戻す');
+                      //もしもこれが最終承認であった場合、承認時の申し送りフォームは無意味
+                      //ただし却下では必要なので、フォーム自体を消せないため、専用の記述で上書きする。
+                      if ($now_stage == $settingData['ApprovalLevelSetting']['last_stage']) {
+                        $approval_comment_toggle = $this->_getLastHiddenCommentFormCode();
+                      }
                     }
                     $event->data['fields'][] = array(
                         'title'    => '承認設定',
@@ -976,9 +1007,9 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
       //初期表示
       $("#ApprovalApprovalComment").css("display","none");
       //バリデーションエラー時に表示したい時がある。
-      $defaultVal = $("#ApprovalApprovalFlag").val();
+      var defaultVal = $("#ApprovalApprovalFlag").val();
       // 保留以外で表示する
-      if (flag > 0) {
+      if (defaultVal > 0) {
         $("#ApprovalApprovalComment").css("display","inline");
         $("#ApprovalCommentNoUse").css("display","none");
       } else {
@@ -990,6 +1021,49 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
         var flag = $("#ApprovalApprovalFlag").val();
         // 保留以外で表示する
         if (flag > 0) {
+          $("#ApprovalApprovalComment").css("display","inline");
+          $("#ApprovalCommentNoUse").css("display","none");
+        } else {
+          $("#ApprovalApprovalComment").css("display","none");
+          $("#ApprovalCommentNoUse").css("display","block");
+        }
+      });
+    });
+    </script>
+    ';
+  }
+
+
+  /**
+  * 最終承認時の申し送り事項フォームの表示を切り替えるコードを取得する。
+  * $event->data['fields']で出力するinputに追記する形で挿入する。
+  *
+  * @return  string
+  * @access  private
+  */
+  private function _getLastHiddenCommentFormCode(){
+    return '<div id="ApprovalCommentNoUse">
+    使用しません。
+    </div>
+    <script type="text/javascript">
+    $(function(){
+      //初期表示
+      $("#ApprovalApprovalComment").css("display","none");
+      //バリデーションエラー時に表示したい時がある。
+      var defaultVal = $("#ApprovalApprovalFlag").val();
+      // 差戻しでのみ表示する
+      if (defaultVal == 2) {
+        $("#ApprovalApprovalComment").css("display","inline");
+        $("#ApprovalCommentNoUse").css("display","none");
+      } else {
+        $("#ApprovalApprovalComment").css("display","none");
+        $("#ApprovalCommentNoUse").css("display","block");
+      }
+      //値の変化を取得して表示を切り返える。
+      $("#ApprovalApprovalFlag").change(function(){
+        var flag = $("#ApprovalApprovalFlag").val();
+        // 差戻しでのみ表示する
+        if (flag == 2) {
           $("#ApprovalApprovalComment").css("display","inline");
           $("#ApprovalCommentNoUse").css("display","none");
         } else {
