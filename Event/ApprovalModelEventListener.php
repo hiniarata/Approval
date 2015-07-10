@@ -319,7 +319,7 @@ class ApprovalModelEventListener extends BcModelEventListener {
         } else {
           $approvalData['ApprovalPost']['next_approver_id'] = 0;
         }
-//var_dump($approvalData);exit;
+
         /* 却下の記録を保存する */
         //承認情報DBを更新する
         if ($approvalPost->save($approvalData)) {
