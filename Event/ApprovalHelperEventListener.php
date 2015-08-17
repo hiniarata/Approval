@@ -189,6 +189,7 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
             $event->data['out'] = str_replace ('<form', $message.'<form', $event->data['out']);
           }
         }
+
       //新規登録時にメッセージを出力しておく。
       } else {
         //承認レベル設定モデルを取得する。
@@ -317,7 +318,7 @@ class ApprovalHelperEventListener extends BcHelperEventListener {
             }
           }
 
-          //もしも差し戻しを受けるなど、データはあるが申請段階のものであれば、
+          //もしも差し戻しを受けるなどして、データはあるものの申請段階のままというものであれば、
           //IDが承認権限者と一致しても承認段階にないので、メッセージを出力しない。
           /*
           if ($approvalPageData['ApprovalPage']['pass_stage'] != 0 && $approvalPageData['ApprovalPage']['next_approver_id'] != 0) {
